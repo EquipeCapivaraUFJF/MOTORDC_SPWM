@@ -23,6 +23,7 @@
 /*    |*    |*
 *    GPIOS
 *    Resolução do pwm 10 bits = 2^10 = 1024
+*    LEN tamanho vetor, mesmo len do .py
 *
 *    *|
 */
