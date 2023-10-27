@@ -1,21 +1,22 @@
 # Ensaio em frequência para o motor DC   📈
-- [Kick Off](#introducao)
-- [Motor 500W e o seu Driver](#motor)
+- [Start](#introducao)
+- [Driver fabricação própria motor DC](#motor)
+- [Driver Comercial](#new)
 - [Código](#code)
 - [Instrumentação](#instrument)
 
+Tutorial sobre acionamento senoidal do motor DC. \
+**O tópico 2 está desatualizado**, para acionamentos de motores DC de porte maior, é preciso utilizar o conversor BTS7960 [^5]
+
 <!-- #######################################################1############################################################# -->
 <details>
-<summary id ="introducao"> <h2> <strong> 1 - Kick Off </h2> </strong> </summary>
+<summary id ="introducao"> <h2> <strong> 1 - Start </h2> </strong> </summary>
 <hr>
-Este tutorial é um resumo sobre hardware e software para acionar o motor DC de forma segura para realização de ensaios. <br>
-Um dos principais pontos de projeto é o tipo de driver usado, os critérios para se decidir sobre o driver mais adequado são:
-
- <li> Circuito de alimentação; </li>
- <li> sensores de corrente; </li>
- <li> circuitos de proteção.</li>
-
-Para o controle de torque (nosso foco), o clássico ensaio em degrau não é adequado para inferir o modelo do sistema por isso a ênfase é pela resposta em frequência. 
+Este tutorial é sobre hardware e software para acionar o motor DC para realização de ensaios. <br>
+Motores BLDC podem se nortear nesse artigo mas precisam das devidas modificações (biblioteca). <br>
+Para o controle de torque (nosso foco), o clássico ensaio em degrau não é adequado para inferir o modelo do sistema por isso a <strong>ênfase aqui é pela resposta em frequência</strong>. <br>
+A biblioteca foco utilizada é a MCPWMesp32. Como desafio futuro, reproduzir este ensaio utilizando um microcontrolador mais robusto, preferencialmente DSP, para obter resultados mais consistentes. 
+Este trabalho concluiu que: o gerador de funções senoidal de bancada apresenta algumas limitações (ajuste analógico de frequências, baixa precisão), ainda sim, é um método simples e muito eficaz.  
 
 ### Material nescessário:
 **1-** ***Motor de baixa potência:***
@@ -27,9 +28,9 @@ Para o controle de torque (nosso foco), o clássico ensaio em degrau não é ade
 **2-** ***Motor de alta potência (500W):***
 
  - Fonte de alimentação 30V/5A,
- - Placa do driver IRAMS10UP,  
+ - Placa do driver IRAMS10UP, **ou** o conversor BTS7960.  
  - Sensor de corrente LEM, 
- - Fonte simétrica +-15V para o driver e sensor. 
+ - Fonte simétrica +-15V para o sensor. 
  
 ***Os demais itens são comuns para ambos ensaios:***
 
@@ -40,6 +41,7 @@ Para o controle de torque (nosso foco), o clássico ensaio em degrau não é ade
  - Jumpers, 
  - Capacitores e resistores diversos para filtragem.</li>
  - Osciloscópio de bancada, </li>
+ - Gerador de sinais de bancada 
 
 
 <figure>
@@ -52,7 +54,7 @@ Para o controle de torque (nosso foco), o clássico ensaio em degrau não é ade
  </details>
 
 <details>
-<summary id="motor"> <h2> <strong> 2 - Motor 500W e o seu Driver </strong> </h2> </summary>
+<summary id="motor"> <h2> <strong> 2 - Driver Fabricação Própria Para o motor </strong> </h2> </summary>
 <hr>
  
 O motor DC de 500W requer cuidados especiais, pois as tensões em 127V podem ocasionar acidentes. A base funcional para este sistema será a da Figura 1, o driver utilizado é do tipo Chopper classe E [^1] e a placa de sensoriamento é baseada no sensor LEM la55p [^2]. 
@@ -91,16 +93,20 @@ Para fazer a combinação de outras duas fases retirando uma, basta seguir o mes
  <!-- ################################################################2#################################################### -->
  </details>
  <details>
-<summary id ="code"><h2><strong>3 - Código</strong></h2></summary>
- <hr>
- 
-O tutorial pode ser reaproveitado para diversas aplicações. No entanto, para o ensaio em frequências, de agora em diante, é recomendado prévio estudo do assunto . <br> 
-Utilizamos o VSCode para programação e upload, através da extensão PlatforMIO (notas aula prof. André.)[^4]. É recomendado já ter noções em *PWM*. <br>
-Para o PWM há a opção de bibliotecas, LEDC e MCPWM. No entanto, para o tipo de motor da Seção 2, é nescessário usar MCPWM.<br>
+<summary id="new"> <h2> <strong> 3 - Driver Comercial </strong> </h2> </summary>
+<hr>
 
-Iniando o script, temos os *#include* e *#define*. O número de sinais PWM gerados são *dois* (um complementar ao outro). <br>
-Estes dois sinas complementares precisam ser montados em um socket ou conector, de modo que se ramifiquem em *quatro*, ou seja, um par semelhante vindo do *GPIO14* e o outro par semelhante vindo do *GPIO16*.<br>
-A bilioteca MCPWM é a única oficial que disponibiliza geradores de sinais complementares.
+O driver BTS7960 hoje é a melhor solução para o acionamento de motores DC variados, suportando uma corrente máxima de incríveis 43A. 
+Este conversor Full H-Bridge possui algumas funcionalidades inclusas, como o dead time e entre outras(datasheet). 
+O entendimento sobre a operação de um conversor com esta topologia é pré-requisito para este experimento. [^1]
+ 
+ </details>
+ <details>
+<summary id ="code"><h2><strong>4 - Código</strong></h2></summary>
+ <hr>
+
+Utilizamos o VSCode para programação e upload, através da extensão PlatforMIO (notas aula prof. André.)[^4]. É recomendado já ter noções em PWM. <br>
+Para o PWM há a opção de bibliotecas, LEDC e MCPWM. No entanto, para o tipo de motor da Seção 2, é nescessário usar MCPWM.<br>
 
 ```ruby
 #include "Wire.h"
@@ -114,122 +120,109 @@ A bilioteca MCPWM é a única oficial que disponibiliza geradores de sinais comp
 #include "driver/adc.h"
 #include "driver/dac.h"
 
-#define CANALDAC25 25
-#define GPIO1 14  // pra IN1 Ponte H
-#define GPIO2 16  // pra IN2 Ponte H
-#define freqStep 1 //unidade da grandeza [miliseconds]
-mcpwm_config_t pwm_config;  //instancia da biblioteca 
-```
-Conforme mencionado, aqui será preciso o conhecimento prévio na técnica de levantamento de dados por resposta senoidal [^1].<br>
-Abaixo nós temos as variáveis globais utilizadas no procedimento de geração senoidal, respectivamente, a variável índice (usada para varrer arrays) e um vetor de forma de ondas com dados pertencentes ao intervalo **(55,80)**.<br>
-O vetor de referências de *duty-cycles* mantido neste intervalo garante que o motor gire somente para um lado.<br>
-O vetor de forma de ondas é gerado em ambiente *python* no código ***geratable.py***. <br>
-Note que a linha *#define freqStep xx* será explicada em um momento mais à frente. 
+/*Os quatro próximos define abaixo são relativos ao driver, ver seção 3 desta referência.*/
+#define PWM_EN_L 19 
+#define PWM_EN_R 18 
+#define GPIO1 14  // pra IN1 do Driver
+#define GPIO2 16  // pra IN2 do Driver
+#define CANALDAC 25 // exportar a referência Duty-cicle para visualizarmos sua forma de onda no osciloscópio
 
-```ruby
-#define LEN 50 // valor que garante uma saída com boa resolução. Compremeteria o funcionamento deste exemplo, caso seu valor fosse alterado sem suas devidas adequações.
-int waveFormTB[LEN] = {67.5,69.1,70.6,72.1,73.5,74.8,76.1,77.1,78.1,78.8,79.4,79.8,80.1,80.1
-,79.8,79.4,78.8,78.1,77.1,76.1,74.8,73.5,72.1,70.6,69.1,67.5,65.9,64.4
-,62.9,61.5,60.2,58.9,57.9,56.9,56.2,55.6,55.2,55.0,55.0,55.2,55.6,56.2
-,56.9,57.9,58.9,60.2,61.5,62.9,64.4,65.9};
-int indexTB = 0;
+mcpwm_config_t pwm_config;  //instancia da biblioteca
+#define freq_do_PWM 20000 
 ```
 
-Continuando o fluxo do código, temos o bloco de *setup* onde basicamente será declarado as opções do módulo PWM e demais funcionalidades.
-Primeiro é aberto o módulo de comunicação serial e nas linhas subsequentes o PWM é habilitado.<br>
-
-Os GPIOS são alocados, um para cada sinal. <br>
-Os sinais podem apelidados por aqui como *a* e *b*. <br>
-A função **mc_pwm_deadtime_enable()**  é quem habilita a complementariedade entre *a* e *b*. Outra grande utilidade desta função é a possibilidade de determinar o *deadtime*(não obrigatório para o driver do IRAMS, logo, os dois últimos parâmetros da função podem ser zerados).<br>
-Posteriormente, é configurado o módulo conversor AD. <br>
-Os argumentos passados na função são padrão e o canal utilizado *ADC1_CHANNEL_6* corresponde ao *GPIO34* do ESP32.
+No próximo trecho de código, a função **mc_pwm_deadtime_enable()** habilita a complementariedade entre os dois sinais gerados de PWM. Outra utilidade desta função é a possibilidade de determinar o *deadtime*(não obrigatório para o driver BTS7960, logo, os dois últimos parâmetros da função podem ser zerados). \
 
 ```ruby
 void setup(){
-  Serial.begin(115200);
+  Serial.begin(115200); // ativa a interface de comunicação serial, usada para debug
+
+/*O bloco abaixo configura as portas de dac e enable, respectivamente, como saída.
+ digitalWrite escreve valor lógico alto nestas portas de enable (DAC não).
+*/
+  pinMode(CANALDAC26, OUTPUT);
+  pinMode(PWM_EN_R, OUTPUT);
+  pinMode(PWM_EN_L, OUTPUT);
+  digitalWrite(PWM_EN_L, HIGH);
+  digitalWrite(PWM_EN_R, HIGH);
 
   /*PWM*/
   mcpwm_gpio_init(MCPWM_UNIT_0, MCPWM0A, GPIO1);
   mcpwm_gpio_init(MCPWM_UNIT_0, MCPWM0B, GPIO2);
-  pwm_config.frequency = 20000; //acima da frequencia audivel (20kHz)
+  pwm_config.frequency = freq_do_PWM; //acima da frequencia audivel (20kHz)
   pwm_config.counter_mode = MCPWM_UP_COUNTER;
   pwm_config.duty_mode = MCPWM_DUTY_MODE_0;
 
   mcpwm_init(MCPWM_UNIT_0, MCPWM_TIMER_0, &pwm_config);
   mcpwm_deadtime_enable(MCPWM_UNIT_0, MCPWM_TIMER_0, MCPWM_ACTIVE_HIGH_COMPLIMENT_MODE, 10, 10);  //Enable deadtime on PWM0A and PWM0B with red = (656)*100ns & fed = (67)*100ns on PWM0A and PWM0B generated from PWM0A}
   
-  adc1_config_channel_atten(ADC1_CHANNEL_6, ADC_ATTEN_DB_11);
-  adc1_config_width(ADC_WIDTH_BIT_10);
  ```
- 
- ***CÓDIGO SE ENCONTRA EM MANUTENÇÂO, por favor aguarde atualizações*** <br>
-O próximo bloco é onde contém a execução dinâmica, onde são realizados: a leitura da corrente de saída do motor, exportado seu valor via DAC, e percorrido o vetor *waveFormTB*.<br>
-Note que para o exemplo deste repositório, somente englobamos sinais senoidais de saída até 20*Hz*, para frequências maiores é nescessário uma pequena adaptação(uso da função delayMicroseconds).
- 
-A leitura é operada através do conversor AD (linha de código desatualizada requer revisão). 
- 
-A dinâmica de atualização do PWM envolve a dinâmica de passos de atualizações. O valor atualizado da referência *duty-cicle* é obtido de dentro de um bloco de execução que possui frequências ajustáveis (depende da frequência senoidal base desejada). <br>
-O usuário deve adequar esta frequência de passo (*freqStep*) segundo a fórmula: <br>
-freqStep = int(K/(freqDesejada* LEN))<br>
-Importante:
-- **Se** freqDesejada < 20 Hz:
-  - K=1000  ( ou seja, K converte freqStep de *seconds* para *mili-seconds*).
-- **Se não**:
-  - K=100000 (ou seja, K converte freqStep de *seconds* para *micro-seconds*).
 
+O duty-cycle para esta biblioteca varia no intervalo *(0.0,100.0)* (1000 termos possíveis). 
+Onde '100' equivale ao duty-cycle 1 e '50' equivale a 0,5.\
+É importante lembrar que na configuração Full- Bridge, duty = 0.5 equivale ao motor parado; 0.5 >duty >= 0 e 1 >= duty > 0.5, correspondem às orientações horárias e anti-horárias.
+Para operar este ensaio, um valor sugerido de referências duty-cycle seria Dmin = 0.6 até Dmáx = 0.8 (Dpp = 0.2).
 
-O *duty-cycle* para *cmpr_a* pertence ao intervalo *(0,100)* (com até uma casa decimal), onde '100' equivale ao duty-cycle 1 e '50' equivale a 0,5.<br>
-Conlcuindo o tópico, o sinal PWM em seu presente passo (indexTB) é salvo na estrutura **cmpr_a**.<br>
+<figure>
+    <img src="include/gerador.jpg" width="500" height="250"/>
+</figure>
 
+*Figura 7 -Gerador de funções analógico, os potenciômetros de AMPLITUDE e OFFSET são muito sensíveis, girar suavemente.*
  ```ruby
   void loop(). 
 {
-  //   int d = (int)(100*adc1_get_raw(ADC1_CHANNEL_6)); //linha de código em manutenção
-  pwm_config.cmpr_a = waveFormTB[indexTB];     // nao e preciso atualizar o canal b, pois a biblioteca já garante que cmpr_a é o complmentar ao gerador cmpr_b
-  mcpwm_init(MCPWM_UNIT_0, MCPWM_TIMER_0, &pwm_config);
-  indexTB++;
-  if(indexTB == LEN)
-    indexTB = 0;
-  delay(freqStep);          
-  //delayMicroseconds(freqStep);  // para freqDesejada >20Hz, adotar esta linha de código e ignorar a linha de cima.
-} 
+  float d = analogRead(34)*0.0002442; // lê o pino 34 do ESP32 (escolhido arbritariamente) e multiplicado por 0.0002442 (onde 0.0002442 = 1/4096), 4096 é relativo aos 12 bits do ADC 
+
+ /*Bloco comentado - para-DEBUG
+
+ A dica é: monitorar o sinal de entrada antes de validar o código no motor. Faça isso variando a amplitude e offset no gerador de funções. CUIDADO, tensões acima de 3.3V podem queimar o ESP32. O DEBUG permitirá fazer um ajuste fino para Dmin, Dmax. 
+ */
+ // Serial.print(d*100);
+ // Serial.print("\n");
+
+  dacWrite(CANALDAC26, int(d *255)); // o DAC trabalha na escala 8 bits, logo multiplicar por 256 o duty
+  mcpwm_set_duty(MCPWM_UNIT_0, MCPWM_TIMER_0, MCPWM_GEN_A, d*100); // já o PWM, conforme já mencionado, trabalha na escala 0 a 100, por isto a multiplicação
+  delayMicroseconds(50); //(valor 50) = 50u, este valor objetiva parear a frequeência de atualização de referência com a frequência do chaveamento (freq_do_pwm)          
+}
+ 
 ```
+
+O bloco de código loop() é simples, basicamente exporta a entrada do ADC vinda do gerador de funções, via DAC e via PWM. \
+Para um ensaio em frequências consistente é peciso visualizar no osciloscópio tanto o a entrada de referência, quanto o sinal DC-senoidal da corrente de saída. 
+
+<figure>
+    <img src="include/osciloscopio.png" width="500" height="250"/>
+</figure>
+
+*Figura 8 -Formas de onda senoidais, em azul temos uma tensão de refrência para Dmin =0.6 e Dmax =0.8.*
  </details>
  <!-- ################################################################2#################################################### -->
 <details>
- <summary id="instrument"> <h2> <strong> 4 - Sensor e bloco de condicionamento </h2> </strong> </summary>
+ <summary id="instrument"> <h2> <strong> 5 - Sensor e bloco de condicionamento </h2> </strong> </summary>
  <hr>
 
 O sensor utilizado aqui é o Sensor de correntes DC por efeito Hall. O modelo utilizado é o LEM La55p [^5], que suporta um valor de corrente medida de 50A. <br>
-Antes de destacar o sensor, vale a pena falar sobre o *filtro RC*, um dos sub-blocos do sistema de medição, cf. figura abaixo: <br>
+Além do sensor, temos também o filtro RC, um dos sub-blocos do sistema de condicionamento, conforme esquema: <br>
 
 <figure>
-    <img src="include/cond.svg" width="600" height="350"/>
+    <img src="include/cond.svg" width="500" height="350"/>
 </figure>
 
-*Figura 6 -Sistema de condicionamento de sinais, visão interna do bloco.*
+*Figura 9 - Sistema de condicionamento de sinais, visão interna dos blocos.*
 
 O resistor Rshunt recomendado é o de 100 *Ohms*, para a fonte de tensão simétrica +-15V. (Cf. datasheet, nas referências) <br>
 Filtro: os ruídos advindos do chaveamento podem se apresentar no sinal mensurado e até mesmo distorcer a forma de onda.<br>
 O modelo é o passa-baixas RC, onde a frequência de canto projetada deve ser um quinto da frequência de chaveamento (segundo a literatura, em geral).<br>
 
 Devido à configuração de fonte corrente do sensor, é preciso utilizar o seguidor de tensão para agir como buffer de tensão. <br>
-Montado o seguidor de tensão (741, LM, etc), o sinal já pode ser filtrado e utilizado no ESP32, note que o amplificador também imbute ganho extra ao sistema. <br>
+Montado o seguidor de tensão (741, LM, etc), o sinal já pode ser filtrado e utilizado no ESP32. <br>
 Por último vem o bloco de diodos que é o grampeador de tensão, que protegem o conversor AD de surtos de tensão.<br>
 
 *Dica*: testar o sensor separadamente em um circuito à parte a fim de se familiarizar com a pinagem e o funcionamento. <br>
-O sensor possui ganho base 100mV/A; além disto, é do tipo não invasivo, nitidamente visível dadas suas características construtivas (tipo "alicate"). <br>
-A ênfase aqui será de mostrar alguns cuidados práticos com o sensor, por exemplo, qual critério utilizar para determinar o número de voltas do cabos de medição que deverão passar por dentro da janela "alicate": <br> 
-
-- **1** Estimar a corrente base do circuito de potência com auxílio do osciloscópio (sonda de corrente).
-- **2** Montar o circuito da *Figura 6* 
-- **3** Definir o número de voltas de cabo pela janela do sensor de modo a adequar as medições: Se a tensão de saída do *bloco* da *Figura 6* ultrapassar o limite da entrada do microcontrolador (3,3V), retire voltas.<br>
-Já se a tensão entregue pelo *bloco de condicionamento* estiver com um valor insuficiente e comprometendo a precisão das medidas, incremente voltas. 
-- **4** Ajuste o número de voltas, de maneira mais refinada, aprimorando os ensaios.
+O sensor possui ganho base 100mV/A; não invasivo (alicate). <br>
+É preciso também determinar o número de voltas do cabos de medição que deverão passar por dentro da janela "alicate", uma sugestão é 10 voltas. <br> 
   </details>
- 
-Com isso cobrimos basicamente todos os pontos sobre o ensaio com motores DC. <br>
-Mais inforações sobre SPWM e ensaio em frequência será disponibilizado neste repositório, em novas releases. <br>
+
 
 [^1]: Playlist curso de controle dinâmico do motor CC, prof. André Ferreira.
   [Cobre eletrônica de potência e este ensaio](https://www.youtube.com/watch?v=4GRKigwDKNM&list=PLBeyFlM_iECLmoYC23Ml1wRUqeZnK2EZT&ab_channel=LABSOLAR-UFJF)  
