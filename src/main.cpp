@@ -1,79 +1,79 @@
-/*    |*    |*
-*    Authors: Caio
-*    Readme:
-*        Nova versão excluiu a biblioteca MCPWM(escala de 0-100 duty) e adicionou a biblioteca LEDC(escala 10bits).
-*        Com a LEDC poderemos trocar mais vezes o indice do vetor (sem sampler hold) porque para mais vezes, o programa leva mais tempo e aí é possivel atrasar = abaixar a freq final mais ainda.        
-*        A nova Tabela foi gerada de 0 a 1000 no .py
-*    Fontes: https://portal.vidadesilicio.com.br/controle-de-potencia-via-pwm-esp32/
-*    
-*    *|
-*/
+#include <Arduino.h>
+#include "Wire.h"
 #include <stdio.h>
-#include <math.h>
 #include "esp_system.h"
 #include "esp_attr.h"
-#include "Arduino.h"
 #include "driver/mcpwm.h"
-#include "driver/adc.h"
 #include "soc/mcpwm_reg.h"
 #include "soc/mcpwm_struct.h"
+#include "driver/adc.h"
 #include "driver/dac.h"
-#include "Wire.h"
 
-/*    |*    |*
-*    GPIOS
-*    Resolução do pwm 10 bits = 2^10 = 1024
-*    LEN tamanho vetor, mesmo len do .py
-*
-*    *|
-*/
-#define GPIO_DAC0 25
-#define GPIO1 19  
-#define RES_1024 10
-#define LEN 1000
-hw_timer_t * timer = NULL;
+// // /*    |*    |*
+// // *    Title: MOTORDC_SPWM (sinusoidal pwm)
+// // *    Authors: Caio
+// // *
+// // *   |*
+// // */
+// // /*
+// // ─ ─ ─ ─ ─ ─ ▄ ▌ ▐ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀▀ ▀ ▀▀ ▀ ▀▀ ▀ ▀▌
+// // ─ ─ ─ ▄ ▄ █ █ ▌ █ ░   ░      # Equipe Capivara #                         ░░ ░  ░  ▐
+// // ▄ ▄ ▄ ▌ ▐ █ █ ▌ █ ░  ░ ░░                                          ░░░ ░ ░ ░     ▐
+// // █ █ █ █ █ █ █ ▌ █ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄ ▄▀ ▀ ▀▀ ▀ ▀▀ ▀ ▀▀ ▀ ▀ ▌===       ---------
+// // ▀ (@) ▀ ▀ ▀ ▀ ▀ ▀ ▀ (@)(@) ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ ▀ (@) ▀ ▘                    (@)
+// // */
 
-int freq_switch = 20000;
-int indexTB = 0;
-int waveFormTB[LEN] = { 500 , 531 , 562 , 593 , 624 , 654 , 684 , 712 , 740 , 767 , 793 , 818 , 842 , 864
-, 885 , 904 , 922 , 938 , 952 , 964 , 975 , 984 , 991 , 996 , 999, 1000,999,996
-, 991 , 984 , 975 , 964 , 952 , 938 , 922, 904 , 885,864,842,818,793,767
-,740 , 712 , 684 , 654 , 624 , 593 , 562 , 531 , 500 , 469 , 438 , 407 , 376, 346
-,316 , 288 , 260 , 233 , 207 ,182, 158 , 136 , 115 , 96, 78, 62, 48, 36
-, 25, 16 , 9 , 4 , 1 , 0 , 1 ,4 , 9, 16, 25, 36, 48, 62
-, 78, 96, 115, 136, 158, 182, 207, 233, 260, 288, 316, 346, 376, 407
-, 438, 469};
-bool pass = false;
 
-/*TIMER*/                                 
-void readINA10k (){
-  pass= true;
-}
 
-void setup()
-{
-  Serial.begin(9600);
-  pinMode(GPIO1, OUTPUT);
+// Definição do sensor de corrente e tensão.
+// #define FREQsen 2
+#define CANALDAC26 26
+#define PWM_EN_L 19
+#define PWM_EN_R 18
 
-  /*TIMER*/                               
-  timer = timerBegin(0, 80, true);
-  timerAttachInterrupt(timer, &readINA10k, true);
-  timerAlarmWrite(timer, 1000, true);
-  timerAlarmEnable(timer);
+#define UP 85
+#define DOWN 65
+#define LEN 50
+#define GPIO1 14  // pra IN1 Ponte H
+#define GPIO2 16  // pra IN2 Ponte H
+mcpwm_config_t pwm_config;
 
-  /*LEDC*/
-  ledcAttachPin(GPIO1, 0);
-  ledcSetup(0, freq_switch, RES_1024); 
+void setup(){
+
+  pinMode(CANALDAC26, OUTPUT);
+  pinMode(PWM_EN_R, OUTPUT);
+  pinMode(PWM_EN_L, OUTPUT);
+
+  digitalWrite(PWM_EN_L, HIGH);
+  digitalWrite(PWM_EN_R, HIGH);
+
+  Serial.begin(115200);
+  
+  /*SETUP VAR*/
+  int freq_pwm = 20000;
+
+  /*PWM*/
+  mcpwm_gpio_init(MCPWM_UNIT_0, MCPWM0A, GPIO1);
+  mcpwm_gpio_init(MCPWM_UNIT_0, MCPWM0B, GPIO2);
+  pwm_config.frequency = freq_pwm;                                                //frequencia do pwm F1 (20Khz) (acima da audivel )
+  pwm_config.counter_mode = MCPWM_UP_COUNTER;
+  pwm_config.duty_mode = MCPWM_DUTY_MODE_0;
+  mcpwm_init(MCPWM_UNIT_0, MCPWM_TIMER_0, &pwm_config);
+
+  mcpwm_deadtime_enable(MCPWM_UNIT_0, MCPWM_TIMER_0, MCPWM_ACTIVE_HIGH_COMPLIMENT_MODE, 0, 0);  //Enable deadtime on PWM0A and PWM0B with red = (656)*100ns & fed = (67)*100ns on PWM0A and PWM0B generated from PWM0A
 }
 
 void loop()
-{ /*100kHz loop*/
+{
 
-  if (pass){
-    ledcWrite(0 , waveFormTB[indexTB]);
-    indexTB++;
-    if (indexTB == 100)
-      indexTB = 0;
-    pass = false;
-  }
+  float d = analogRead(34)*0.0002442;
+
+  /*Descomente para fazer o DEBUG do duty-cycle vindo do gerador*/
+  // Serial.print(d*100);
+  // Serial.print("\n");
+
+  dacWrite(CANALDAC26, int(d *255));
+  mcpwm_set_duty(MCPWM_UNIT_0, MCPWM_TIMER_0, MCPWM_GEN_A, int(d*100));
+  delayMicroseconds(50);
+   
 }
